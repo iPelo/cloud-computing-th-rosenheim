@@ -1,0 +1,7 @@
+name: provisioning-docker
+services:
+  cc-nginx:
+    image: cc-nginx:v1
+    build: .
+    ports:
+      - "127.0.0.1:8090:80"

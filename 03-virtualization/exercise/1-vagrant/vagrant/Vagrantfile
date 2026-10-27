@@ -1,0 +1,73 @@
+# Work around the macOS socket-check bug.
+require "socket"
+require "timeout"
+require "vagrant/util/is_port_open"
+
+module Vagrant
+  module Util
+    module IsPortOpen
+      def is_port_open?(host, port)
+        Timeout.timeout(1) { TCPSocket.new(host, port).close }
+        true
+      rescue Errno::ETIMEDOUT, Errno::ECONNREFUSED,
+             Errno::EHOSTUNREACH, Errno::ENETUNREACH,
+             Errno::EACCES, Errno::ENOTCONN,
+             Errno::EALREADY, Timeout::Error
+        false
+      end
+
+      extend self
+    end
+  end
+end
+
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.box_architecture = "arm64"
+  config.vm.box_check_update = false
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "1024"
+  end
+
+  # Task 2: Forward port 80 to localhost:8081
+  config.vm.network "forwarded_port",
+    guest: 80,
+    host: 8081,
+    host_ip: "127.0.0.1"
+
+  # Provisioning runs as root inside Ubuntu, not on macOS.
+  config.vm.provision "shell", inline: <<-'SHELL'
+    set -eu
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    # Select FPM and CLI explicitly so PHP does not pull in the Apache server.
+    apt-get install -y nginx mysql-server mysql-client php-fpm php-cli php-mysql
+
+    systemctl enable --now mysql php8.3-fpm nginx
+
+    # Configure the exercise's root password using SQL instead of old debconf keys.
+    # The first run uses Ubuntu's socket authentication; later runs use this password.
+    mysql_client_config=$(mktemp)
+    trap 'rm -f "$mysql_client_config"' EXIT
+    cat > "$mysql_client_config" <<'MYSQL_CONFIG'
+[client]
+user=root
+password=secret
+protocol=socket
+MYSQL_CONFIG
+    mysql --defaults-extra-file="$mysql_client_config" <<'SQL'
+ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY 'secret';
+SQL
+
+    install -d -m 0755 /usr/share/nginx/www
+    install -m 0644 /vagrant/default /etc/nginx/sites-available/default
+    install -m 0644 /vagrant/info.php /usr/share/nginx/www/info.php
+    install -m 0644 /vagrant/index.html /usr/share/nginx/www/index.html
+
+    nginx -t
+    systemctl reload nginx
+  SHELL
+end

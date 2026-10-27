@@ -1,0 +1,12 @@
+FROM ubuntu:24.04
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-server python3 python3-apt \
+    && mkdir -p /run/sshd \
+    && echo 'root:verysecretpassword' | chpasswd \
+    && printf '\nPermitRootLogin yes\nPasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-provisioning-lab.conf \
+    && sed -i 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' /etc/pam.d/sshd \
+    && rm -rf /var/lib/apt/lists/*
+EXPOSE 22 80
+# Generate distinct host keys for each managed node on its first startup.
+RUN rm -f /etc/ssh/ssh_host_*
+CMD ["/bin/sh", "-c", "ssh-keygen -A && exec /usr/sbin/sshd -D -e"]

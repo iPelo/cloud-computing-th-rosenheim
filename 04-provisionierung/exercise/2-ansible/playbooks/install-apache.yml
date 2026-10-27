@@ -1,0 +1,28 @@
+---
+- name: Provision the Apache lab servers
+  hosts: server_hosts
+  remote_user: root
+  gather_facts: false
+  tasks:
+    - name: Test SSH and Python connectivity
+      ansible.builtin.ping:
+
+    - name: Install the latest available Apache package
+      ansible.builtin.apt:
+        name: apache2
+        state: latest
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Copy our welcome page
+      ansible.builtin.copy:
+        src: index.html
+        dest: /var/www/html/index.html
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Ensure Apache is running
+      ansible.builtin.service:
+        name: apache2
+        state: started

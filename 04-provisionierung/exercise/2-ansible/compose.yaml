@@ -1,0 +1,33 @@
+name: provisioning-ansible
+services:
+  managed-node:
+    image: cc-managed:provisioning
+    build:
+      context: .
+      dockerfile: Dockerfile_Managed_Node
+    networks: [cloudcomputing]
+    ports:
+      - "127.0.0.1::80"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/22"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  ansible-node:
+    image: willhallonline/ansible:2.18-alpine-3.22
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["sleep infinity"]
+    mem_limit: 100m
+    networks: [cloudcomputing]
+    depends_on:
+      managed-node:
+        condition: service_healthy
+    environment:
+      ANSIBLE_FORKS: "1"
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+    volumes:
+      - ./ansible/hosts:/etc/ansible/hosts:ro
+      - ./playbooks:/work/playbooks:ro
+networks:
+  cloudcomputing:
+    driver: bridge
